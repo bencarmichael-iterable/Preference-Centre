@@ -1,0 +1,8 @@
+[build]
+  publish = "."               # your HTML/CSS/JS files live in the root
+  functions = "netlify/functions"
+
+[dev]
+  functionsPort = 9999
+  publish = "."
+  autoLaunch = true

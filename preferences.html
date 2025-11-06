@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Preferences</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <meta name="robots" content="noindex" />
+  </head>
+
+  <body>
+    <main class="container">
+      <header>
+        <h1>Manage Your Preferences</h1>
+        <p id="welcomeMsg" class="subhead"></p>
+      </header>
+
+      <p id="status" role="status" aria-live="polite"></p>
+
+      <!-- Global Unsubscribe -->
+      <section class="card">
+        <h2>Global</h2>
+        <label class="pref-item">
+          <input type="checkbox" id="globalUnsubAll" />
+          <strong>Unsubscribe from all messaging</strong>
+        </label>
+        <p class="hint">
+          Transactional/essential messages may still be sent (e.g., receipts,
+          password resets).
+        </p>
+      </section>
+
+      <form id="prefForm" novalidate>
+        <!-- EMAIL -->
+        <section class="card" data-medium="Email">
+          <h2>Email</h2>
+
+          <fieldset
+            class="channel"
+            data-channel-id="105894"
+            data-medium="Email"
+          >
+            <legend class="sr-only">Email Marketing</legend>
+
+            <div class="pref-group">
+              <!-- All Marketing (channel) -->
+              <label class="pref-item">
+                <input type="checkbox" class="channel-toggle" />
+                <span>All Marketing</span>
+              </label>
+
+              <!-- Message types -->
+              <div class="message-types">
+                <label class="pref-item msgtype" data-message-type-id="141696">
+                  <input type="checkbox" class="msgtype-toggle" />
+                  <span>Monthly Newsletters</span>
+                </label>
+
+                <label class="pref-item msgtype" data-message-type-id="134888">
+                  <input type="checkbox" class="msgtype-toggle" />
+                  <span>Promotional Content</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+        </section>
+
+        <!-- SMS -->
+        <section class="card" data-medium="SMS">
+          <h2>SMS</h2>
+          <fieldset class="channel" data-channel-id="105898" data-medium="SMS">
+            <legend class="sr-only">SMS Marketing</legend>
+            <label class="pref-item">
+              <input type="checkbox" class="channel-toggle" />
+              <span>Marketing</span>
+            </label>
+          </fieldset>
+        </section>
+
+        <!-- Push -->
+        <section class="card" data-medium="Push">
+          <h2>Push</h2>
+          <fieldset class="channel" data-channel-id="105896" data-medium="Push">
+            <legend class="sr-only">Push Marketing</legend>
+            <label class="pref-item">
+              <input type="checkbox" class="channel-toggle" />
+              <span>Marketing</span>
+            </label>
+          </fieldset>
+        </section>
+
+        <!-- WhatsApp -->
+        <section class="card" data-medium="WhatsApp">
+          <h2>WhatsApp</h2>
+          <fieldset
+            class="channel"
+            data-channel-id="122989"
+            data-medium="WhatsApp"
+          >
+            <legend class="sr-only">WhatsApp Marketing</legend>
+            <label class="pref-item">
+              <input type="checkbox" class="channel-toggle" />
+              <span>Marketing</span>
+            </label>
+          </fieldset>
+        </section>
+
+        <div class="actions">
+          <button type="submit">Save Preferences</button>
+        </div>
+      </form>
+    </main>
+
+    <script>
+      (function () {
+        // --- config: keep UI clean, but retain Iterable IDs in data-attrs
+        const EMAIL_CHANNEL_ID = 105894;
+        const MT_NEWSLETTER = 141696;
+        const MT_PROMO_LIMITED = 134888;
+
+        const email = sessionStorage.getItem("userEmail");
+        const welcome = document.getElementById("welcomeMsg");
+        const statusEl = document.getElementById("status");
+        const form = document.getElementById("prefForm");
+        const globalUnsubAll = document.getElementById("globalUnsubAll");
+
+        if (!email) {
+          window.location.href = "identify.html";
+          return;
+        }
+        welcome.textContent = `Signed in as ${email}`;
+
+        function setStatus(msg, isError) {
+          statusEl.textContent = msg || "";
+          statusEl.style.color = isError ? "darkred" : "green";
+        }
+
+        function setChecked(selector, checked) {
+          const el = document.querySelector(selector);
+          if (el) el.checked = !!checked;
+        }
+        function getChannelToggle(id) {
+          return document.querySelector(
+            `.channel[data-channel-id="${id}"] .channel-toggle`
+          );
+        }
+        function getMsgTypeToggle(id) {
+          return document.querySelector(
+            `.msgtype[data-message-type-id="${id}"] .msgtype-toggle`
+          );
+        }
+        function applyGlobalDisable(disabled) {
+          form
+            .querySelectorAll(".channel-toggle, .msgtype-toggle")
+            .forEach((cb) => (cb.disabled = disabled));
+        }
+        globalUnsubAll.addEventListener("change", (e) =>
+          applyGlobalDisable(e.target.checked)
+        );
+
+        // --- Load current state on page load (uses your Netlify GET function)
+        // Expect the function to return:
+        // { subscribedMessageTypeIds?: number[], unsubscribedChannelIds?: number[], unsubscribedMessageTypeIds?: number[] }
+        async function loadPrefs() {
+          try {
+            setStatus("Loading…");
+            const res = await fetch(
+              `/api/get-preferences?email=${encodeURIComponent(email)}`
+            );
+            const json = await res.json();
+            if (!res.ok)
+              throw new Error(json.error || "Failed to load preferences");
+
+            // pull fields from either top-level or nested "fields" (support both shapes)
+            const fields = json.fields || json || {};
+            const unsubChannels = new Set(fields.unsubscribedChannelIds || []);
+            const unsubMsgTypes = new Set(
+              fields.unsubscribedMessageTypeIds || []
+            );
+            const subMsgTypes = new Set(fields.subscribedMessageTypeIds || []);
+
+            // Default is OPT-IN, so:
+            // Channel is ON unless it's listed in unsubscribedChannelIds
+            setChecked(
+              `.channel[data-channel-id="${EMAIL_CHANNEL_ID}"] .channel-toggle`,
+              !unsubChannels.has(EMAIL_CHANNEL_ID)
+            );
+
+            // Message types: ON if explicitly subscribed OR (default opt-in AND not explicitly unsubscribed)
+            const newsletterOn =
+              subMsgTypes.has(MT_NEWSLETTER) ||
+              (!unsubMsgTypes.has(MT_NEWSLETTER) &&
+                !fields.subscribedMessageTypeIds);
+            const promoLimitedOn =
+              subMsgTypes.has(MT_PROMO_LIMITED) ||
+              (!unsubMsgTypes.has(MT_PROMO_LIMITED) &&
+                !fields.subscribedMessageTypeIds);
+
+            getMsgTypeToggle(MT_NEWSLETTER).checked = !!newsletterOn;
+            getMsgTypeToggle(MT_PROMO_LIMITED).checked = !!promoLimitedOn;
+
+            // SMS
+            setChecked(
+              `.channel[data-channel-id="105898"] .channel-toggle`,
+              !unsubChannels.has(105898)
+            );
+            // Push
+            setChecked(
+              `.channel[data-channel-id="105896"] .channel-toggle`,
+              !unsubChannels.has(105896)
+            );
+            // WhatsApp
+            setChecked(
+              `.channel[data-channel-id="122989"] .channel-toggle`,
+              !unsubChannels.has(122989)
+            );
+
+            setStatus("Preferences loaded.");
+          } catch (e) {
+            console.error(e);
+            setStatus(e.message, true);
+          }
+        }
+
+        // --- Save: build desired state and send to your Netlify function that calls the Subscriptions API
+        async function savePrefs(e) {
+          e.preventDefault();
+          try {
+            setStatus("Saving…");
+
+            // Read UI
+            const emailMarketingOn = getChannelToggle(EMAIL_CHANNEL_ID).checked;
+            const newsletterOn = getMsgTypeToggle(MT_NEWSLETTER).checked;
+            const promoLimitedOn = getMsgTypeToggle(MT_PROMO_LIMITED).checked;
+            const smsOn = getChannelToggle(105898).checked;
+            const pushOn = getChannelToggle(105896).checked;
+            const waOn = getChannelToggle(122989).checked;
+
+            // Prepare payload for backend to translate into PATCH/DELETE calls:
+            // - channels: array of { id, subscribe: boolean }
+            // - messageTypes: array of { id, subscribe: boolean }
+            // - globalUnsubAll: boolean (optional behavior up to you)
+            const payload = {
+              email,
+              globalUnsubAll: !!globalUnsubAll.checked,
+              channels: [
+                { id: EMAIL_CHANNEL_ID, subscribe: !!emailMarketingOn },
+                { id: 105898, subscribe: !!smsOn },
+                { id: 105896, subscribe: !!pushOn },
+                { id: 122989, subscribe: !!waOn },
+              ],
+              messageTypes: [
+                { id: MT_NEWSLETTER, subscribe: !!newsletterOn },
+                { id: MT_PROMO_LIMITED, subscribe: !!promoLimitedOn },
+              ],
+            };
+
+            // Call a serverless function you’ll implement to fan out to:
+            //   PATCH /api/subscriptions/messageChannel/{id}/user/{email} to subscribe
+            //   DELETE /api/subscriptions/messageChannel/{id}/user/{email} to unsubscribe
+            //   PATCH/DELETE /api/subscriptions/messageType/{id}/user/{email} similarly
+            const res = await fetch("/api/update-subscriptions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Save failed");
+
+            setStatus("Preferences saved.");
+          } catch (e) {
+            console.error(e);
+            setStatus(e.message, true);
+          }
+        }
+
+        // Kick off
+        loadPrefs();
+        form.addEventListener("submit", savePrefs);
+      })();
+    </script>
+
+    <!-- Local layout tweaks for alignment & spacing.
+         You can move this into styles.css if you prefer. -->
+    <style>
+      /* a11y: keep legends for screen readers only */
+      .sr-only {
+        position: absolute !important;
+        height: 1px;
+        width: 1px;
+        overflow: hidden;
+        clip: rect(1px, 1px, 1px, 1px);
+        white-space: nowrap;
+      }
+
+      /* Wrap all checkbox rows in a consistent layout */
+      .pref-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+      }
+
+      .pref-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .message-types {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        margin-left: 0; /* keep aligned with All Marketing text */
+      }
+
+      /* Space out each channel card a bit more neatly */
+      section.card[data-medium] {
+        margin-top: 1rem;
+      }
+
+      section.card[data-medium] h2 {
+        margin-bottom: 0.35rem;
+      }
+
+      .channel {
+        border: none; /* keep fieldset border from messing with alignment */
+        padding: 0;
+        margin: 0;
+      }
+    </style>
+  </body>
+</html>
